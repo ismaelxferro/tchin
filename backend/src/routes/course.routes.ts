@@ -3,6 +3,12 @@ import { prisma } from "../lib/prisma";
 import { authMiddleware, requireRole } from "../middleware/auth.middleware";
 import { isCourseOwner, isCourseTeacher } from "../lib/courseAccess";
 
+
+const getParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || "";
+};
+
 const router = Router();
 
 router.use(authMiddleware);
@@ -149,7 +155,12 @@ router.post("/join", requireRole("STUDENT"), async (req, res) => {
 
 router.post("/:courseId/teachers", requireRole("TEACHER"), async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const courseId = getParam(req.params.courseId);
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course ID is required" });
+    }
+
     const { identifier } = req.body;
     const ownerId = (req as any).user.userId;
 
@@ -215,7 +226,12 @@ router.post("/:courseId/teachers", requireRole("TEACHER"), async (req, res) => {
 
 router.get("/:courseId/participants", async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const courseId = getParam(req.params.courseId);
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course ID is required" });
+    }
+
     const user = (req as any).user;
 
     const course = await prisma.course.findUnique({
@@ -307,7 +323,12 @@ router.get("/:courseId/participants", async (req, res) => {
 
 router.delete("/:courseId/leave", requireRole("STUDENT"), async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const courseId = getParam(req.params.courseId);
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course ID is required" });
+    }
+
     const studentId = (req as any).user.userId;
 
     const enrollment = await prisma.courseEnrollment.findUnique({
@@ -340,7 +361,17 @@ router.delete("/:courseId/leave", requireRole("STUDENT"), async (req, res) => {
 
 router.delete("/:courseId/teachers/:teacherId", requireRole("TEACHER"), async (req, res) => {
   try {
-    const { courseId, teacherId } = req.params;
+    const courseId = getParam(req.params.courseId);
+    const teacherId = getParam(req.params.teacherId);
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course ID is required" });
+    }
+
+    if (!teacherId) {
+      return res.status(400).json({ message: "Teacher ID is required" });
+    }
+
     const ownerId = (req as any).user.userId;
 
     const owner = await isCourseOwner(courseId, ownerId);
@@ -379,7 +410,12 @@ router.delete("/:courseId/teachers/:teacherId", requireRole("TEACHER"), async (r
 
 router.delete("/:courseId", requireRole("TEACHER"), async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const courseId = getParam(req.params.courseId);
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course ID is required" });
+    }
+
     const teacherId = (req as any).user.userId;
 
     const course = await prisma.course.findUnique({

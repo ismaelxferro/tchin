@@ -5,6 +5,10 @@ import { prisma } from "../lib/prisma";
 import { authMiddleware, requireRole } from "../middleware/auth.middleware";
 import { isCourseTeacher } from "../lib/courseAccess";
 
+const getParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || "";
+};
 const router = Router();
 
 router.use(authMiddleware);
@@ -57,7 +61,12 @@ router.post(
   upload.single("pdf"),
   async (req, res) => {
     try {
-      const { assignmentId } = req.params;
+      const assignmentId = getParam(req.params.assignmentId);
+
+      if (!assignmentId) {
+        return res.status(400).json({ message: "Assignment ID is required" });
+      }
+
       const studentId = (req as any).user.userId;
 
       if (!req.file) {
@@ -98,6 +107,7 @@ router.post(
           status: "SUBMITTED",
           submittedAt: new Date(),
           teacherComment: null,
+          grade: null,
           correctedPdfPath: null,
           correctedAt: null,
         },
@@ -117,7 +127,12 @@ router.post(
 
 router.get("/assignment/:assignmentId", requireRole("TEACHER"), async (req, res) => {
   try {
-    const { assignmentId } = req.params;
+    const assignmentId = getParam(req.params.assignmentId);
+
+    if (!assignmentId) {
+      return res.status(400).json({ message: "Assignment ID is required" });
+    }
+
     const teacherId = (req as any).user.userId;
 
     const assignment = await prisma.assignment.findUnique({
@@ -164,7 +179,12 @@ router.patch(
   correctionUpload.single("correctedPdf"),
   async (req, res) => {
     try {
-      const { submissionId } = req.params;
+      const submissionId = getParam(req.params.submissionId);
+
+      if (!submissionId) {
+        return res.status(400).json({ message: "Submission ID is required" });
+      }
+
       const { teacherComment, grade } = req.body;
       const teacherId = (req as any).user.userId;
 
@@ -184,18 +204,18 @@ router.patch(
       if (!allowed) {
         return res.status(403).json({ message: "Forbidden" });
       }
-	  
-	  const validGrades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
 
-if (grade && !validGrades.includes(grade)) {
-  return res.status(400).json({ message: "Grade must be between 1 and 10" });
-}
+      const validGrades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+
+      if (grade && !validGrades.includes(grade)) {
+        return res.status(400).json({ message: "Grade must be between 1 and 10" });
+      }
 
       const reviewedSubmission = await prisma.submission.update({
         where: { id: submissionId },
         data: {
           teacherComment,
-		  grade: grade || null,
+          grade: grade || null,
           correctedPdfPath: req.file ? req.file.path : submission.correctedPdfPath,
           status: "REVIEWED",
           correctedAt: new Date(),
@@ -211,7 +231,12 @@ if (grade && !validGrades.includes(grade)) {
 
 router.get("/my/assignment/:assignmentId", requireRole("STUDENT"), async (req, res) => {
   try {
-    const { assignmentId } = req.params;
+    const assignmentId = getParam(req.params.assignmentId);
+
+    if (!assignmentId) {
+      return res.status(400).json({ message: "Assignment ID is required" });
+    }
+
     const studentId = (req as any).user.userId;
 
     const submission = await prisma.submission.findUnique({
