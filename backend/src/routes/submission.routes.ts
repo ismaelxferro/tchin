@@ -1,59 +1,68 @@
 import { Router } from "express";
 import multer from "multer";
-import path from "path";
 import { prisma } from "../lib/prisma";
 import { authMiddleware, requireRole } from "../middleware/auth.middleware";
 import { isCourseTeacher } from "../lib/courseAccess";
+import { createSignedPdfUrl, uploadPdfToStorage } from "../lib/storage";
 
 const getParam = (param: string | string[] | undefined): string => {
   if (Array.isArray(param)) return param[0];
   return param || "";
 };
+
+const getBodyValue = (value: unknown): string => {
+  if (Array.isArray(value)) return String(value[0] || "");
+  return value ? String(value) : "";
+};
+
 const router = Router();
 
 router.use(authMiddleware);
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/submissions");
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueName + path.extname(file.originalname));
-  },
-});
+const pdfFileFilter: multer.Options["fileFilter"] = (req, file, cb) => {
+  if (file.mimetype !== "application/pdf") {
+    return cb(new Error("Only PDF files are allowed"));
+  }
 
-const correctionStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/corrections");
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueName + path.extname(file.originalname));
-  },
-});
+  cb(null, true);
+};
 
 const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype !== "application/pdf") {
-      return cb(new Error("Only PDF files are allowed"));
-    }
-
-    cb(null, true);
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
   },
+  fileFilter: pdfFileFilter,
 });
 
 const correctionUpload = multer({
-  storage: correctionStorage,
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype !== "application/pdf") {
-      return cb(new Error("Only PDF files are allowed"));
-    }
-
-    cb(null, true);
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
   },
+  fileFilter: pdfFileFilter,
 });
+
+async function getAuthorizedSubmission(submissionId: string, userId: string) {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    include: {
+      assignment: true,
+    },
+  });
+
+  if (!submission) {
+    return { submission: null, allowed: false };
+  }
+
+  if (submission.studentId === userId) {
+    return { submission, allowed: true };
+  }
+
+  const allowedTeacher = await isCourseTeacher(submission.assignment.courseId, userId);
+
+  return { submission, allowed: allowedTeacher };
+}
 
 router.post(
   "/assignment/:assignmentId",
@@ -95,6 +104,11 @@ router.post(
         return res.status(403).json({ message: "You are not enrolled in this course" });
       }
 
+      const pdfPath = await uploadPdfToStorage(
+        req.file,
+        `submissions/${assignmentId}/${studentId}`
+      );
+
       const submission = await prisma.submission.upsert({
         where: {
           assignmentId_studentId: {
@@ -103,7 +117,7 @@ router.post(
           },
         },
         update: {
-          pdfPath: req.file.path,
+          pdfPath,
           status: "SUBMITTED",
           submittedAt: new Date(),
           teacherComment: null,
@@ -114,12 +128,13 @@ router.post(
         create: {
           assignmentId,
           studentId,
-          pdfPath: req.file.path,
+          pdfPath,
         },
       });
 
       res.status(201).json(submission);
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Submit PDF error" });
     }
   }
@@ -173,6 +188,66 @@ router.get("/assignment/:assignmentId", requireRole("TEACHER"), async (req, res)
   }
 });
 
+router.get("/file/:submissionId/submitted", async (req, res) => {
+  try {
+    const submissionId = getParam(req.params.submissionId);
+
+    if (!submissionId) {
+      return res.status(400).json({ message: "Submission ID is required" });
+    }
+
+    const userId = (req as any).user.userId;
+    const { submission, allowed } = await getAuthorizedSubmission(submissionId, userId);
+
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    if (!allowed) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const signedUrl = await createSignedPdfUrl(submission.pdfPath);
+
+    res.json({ url: signedUrl });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Open submitted PDF error" });
+  }
+});
+
+router.get("/file/:submissionId/corrected", async (req, res) => {
+  try {
+    const submissionId = getParam(req.params.submissionId);
+
+    if (!submissionId) {
+      return res.status(400).json({ message: "Submission ID is required" });
+    }
+
+    const userId = (req as any).user.userId;
+    const { submission, allowed } = await getAuthorizedSubmission(submissionId, userId);
+
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    if (!allowed) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    if (!submission.correctedPdfPath) {
+      return res.status(404).json({ message: "Corrected PDF not found" });
+    }
+
+    const signedUrl = await createSignedPdfUrl(submission.correctedPdfPath);
+
+    res.json({ url: signedUrl });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Open corrected PDF error" });
+  }
+});
+
 router.patch(
   "/:submissionId/review",
   requireRole("TEACHER"),
@@ -185,7 +260,8 @@ router.patch(
         return res.status(400).json({ message: "Submission ID is required" });
       }
 
-      const { teacherComment, grade } = req.body;
+      const teacherComment = getBodyValue(req.body.teacherComment);
+      const grade = getBodyValue(req.body.grade);
       const teacherId = (req as any).user.userId;
 
       const submission = await prisma.submission.findUnique({
@@ -211,12 +287,21 @@ router.patch(
         return res.status(400).json({ message: "Grade must be between 1 and 10" });
       }
 
+      let correctedPdfPath = submission.correctedPdfPath;
+
+      if (req.file) {
+        correctedPdfPath = await uploadPdfToStorage(
+          req.file,
+          `corrections/${submissionId}`
+        );
+      }
+
       const reviewedSubmission = await prisma.submission.update({
         where: { id: submissionId },
         data: {
-          teacherComment,
+          teacherComment: teacherComment || null,
           grade: grade || null,
-          correctedPdfPath: req.file ? req.file.path : submission.correctedPdfPath,
+          correctedPdfPath,
           status: "REVIEWED",
           correctedAt: new Date(),
         },
@@ -224,6 +309,7 @@ router.patch(
 
       res.json(reviewedSubmission);
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Review submission error" });
     }
   }

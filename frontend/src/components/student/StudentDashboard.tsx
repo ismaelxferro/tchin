@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/api";
 import type { Assignment, Course, Participant, User } from "../../types";
-import { fileUrl, formatDateUS, isLateSubmission } from "../../utils";
+import { formatDateUS, isLateSubmission } from "../../utils";
 import ParticipantCard from "../shared/ParticipantCard";
 import FileInput from "../shared/FileInput";
 import { useAppModal } from "../shared/AppModalProvider";
@@ -136,6 +136,55 @@ const [leavingCourse, setLeavingCourse] = useState(false);
     });
   } finally {
     setLeavingCourse(false);
+  }
+};
+
+
+const openSubmittedPdf = async (submissionId: string) => {
+  try {
+    const response = await api.get(`/submissions/file/${submissionId}/submitted`);
+
+    if (!response.data.url) {
+      await showAlert({
+        title: "Could not open PDF",
+        message: "No PDF URL was returned.",
+      });
+      return;
+    }
+
+    window.location.href = response.data.url;
+  } catch (error: any) {
+    await showAlert({
+      title: "Could not open PDF",
+      message:
+        error.response?.data?.message ||
+        error.message ||
+        "Something went wrong while opening the submitted PDF.",
+    });
+  }
+};
+
+const openCorrectedPdf = async (submissionId: string) => {
+  try {
+    const response = await api.get(`/submissions/file/${submissionId}/corrected`);
+
+    if (!response.data.url) {
+      await showAlert({
+        title: "Could not open PDF",
+        message: "No PDF URL was returned.",
+      });
+      return;
+    }
+
+    window.location.href = response.data.url;
+  } catch (error: any) {
+    await showAlert({
+      title: "Could not open PDF",
+      message:
+        error.response?.data?.message ||
+        error.message ||
+        "Something went wrong while opening the corrected PDF.",
+    });
   }
 };
 
@@ -340,24 +389,21 @@ const [leavingCourse, setLeavingCourse] = useState(false);
 )}
 
     <div className="card-actions">
-      <a
+      <button
   className="file-action-link submitted"
-  href={fileUrl(submission.pdfPath)}
-  target="_blank"
-  rel="noreferrer"
+  onClick={() => openSubmittedPdf(submission.id)}
 >
   View submitted PDF
-</a>
+</button>
 
       {submission.correctedPdfPath && (
-        <a
-          href={fileUrl(submission.correctedPdfPath)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          View corrected PDF
-        </a>
-      )}
+  <button
+  className="file-action-link corrected"
+  onClick={() => openCorrectedPdf(submission.id)}
+>
+  View corrected PDF
+</button>
+)}
     </div>
   </div>
 );
@@ -412,6 +458,8 @@ const [leavingCourse, setLeavingCourse] = useState(false);
 ))}
   </div>
 );
+
+
 }
 
 export default StudentDashboard;

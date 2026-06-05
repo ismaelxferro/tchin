@@ -1834,8 +1834,13 @@ button:active,
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: startupFadeOut 0.35s ease forwards;
-  animation-delay: 1.15s;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.startup-splash.leaving {
+  opacity: 0;
+  transform: scale(1.03);
+  pointer-events: none;
 }
 
 .startup-splash-card {
@@ -1856,9 +1861,33 @@ button:active,
   display: block;
 }
 
-@keyframes startupFadeOut {
-  to {
-    opacity: 0;
-    transform: scale(1.03);
+
+button.file-action-link {
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.side-drawer {
+  height: 100dvh;
+  max-height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding-bottom: calc(90px + env(safe-area-inset-bottom));
+}
+
+.logout-item {
+  margin-top: auto;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 520px) {
+  .side-drawer {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+
+  .logout-item {
+    margin-bottom: 24px;
   }
 }

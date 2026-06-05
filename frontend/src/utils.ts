@@ -46,3 +46,15 @@ export function getInitials(fullName: string) {
     .map((part) => part[0]?.toUpperCase() || "")
     .join("");
 }
+
+const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, "");
+
+export function submittedPdfUrl(submissionId?: string) {
+  if (!submissionId) return "";
+  return `${apiBaseUrl}/submissions/file/${submissionId}/submitted`;
+}
+
+export function correctedPdfUrl(submissionId?: string) {
+  if (!submissionId) return "";
+  return `${apiBaseUrl}/submissions/file/${submissionId}/corrected`;
+}

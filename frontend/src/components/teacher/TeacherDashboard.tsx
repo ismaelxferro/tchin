@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/api";
 import type { Assignment, Course, Participant, Submission, User } from "../../types";
-import { fileUrl, formatDateUS, isLateSubmission } from "../../utils";
+import { formatDateUS, isLateSubmission } from "../../utils";
 import ParticipantCard from "../shared/ParticipantCard";
 import FileInput from "../shared/FileInput";
 import { useAppModal } from "../shared/AppModalProvider";
@@ -285,6 +285,30 @@ const removeCoTeacher = async (participant: Participant) => {
   }
 };
 
+const openSubmittedPdf = async (submissionId: string) => {
+  try {
+    const response = await api.get(`/submissions/file/${submissionId}/submitted`);
+    window.open(response.data.url, "_blank");
+  } catch {
+    await showAlert({
+      title: "Could not open PDF",
+      message: "Something went wrong while opening the submitted PDF.",
+    });
+  }
+};
+
+const openCorrectedPdf = async (submissionId: string) => {
+  try {
+    const response = await api.get(`/submissions/file/${submissionId}/corrected`);
+    window.open(response.data.url, "_blank");
+  } catch {
+    await showAlert({
+      title: "Could not open PDF",
+      message: "Something went wrong while opening the corrected PDF.",
+    });
+  }
+};
+
   if (selectedCourse && selectedAssignment) {
     return (
       <>
@@ -349,14 +373,12 @@ const removeCoTeacher = async (participant: Participant) => {
     </div>
 
     <div className="card-actions">
-      <a
+      <button
   className="file-action-link submitted"
-  href={fileUrl(submission.pdfPath)}
-  target="_blank"
-  rel="noreferrer"
+  onClick={() => openSubmittedPdf(submission.id)}
 >
   View submitted PDF
-</a>
+</button>
     </div>
 
     <textarea
@@ -415,14 +437,12 @@ const removeCoTeacher = async (participant: Participant) => {
 
     {submission.correctedPdfPath && (
       <div className="card-actions">
-        <a
+        <button
   className="file-action-link corrected"
-  href={fileUrl(submission.correctedPdfPath)}
-  target="_blank"
-  rel="noreferrer"
+  onClick={() => openCorrectedPdf(submission.id)}
 >
   View corrected PDF
-</a>
+</button>
       </div>
     )}
 
@@ -655,6 +675,8 @@ const removeCoTeacher = async (participant: Participant) => {
 ))}
   </div>
 );
+
+
 }
 
 export default TeacherDashboard;
