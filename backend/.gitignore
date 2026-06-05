@@ -1,0 +1,11 @@
+.env
+.env.*
+node_modules/
+dist/
+uploads/
+android/app/build/
+*.jks
+*.keystore
+*.apk
+*.aab
+/generated/prisma

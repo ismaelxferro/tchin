@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">T-Chin</string>
+    <string name="title_activity_main">T-Chin</string>
+    <string name="package_name">com.isma.tchin</string>
+    <string name="custom_url_scheme">com.isma.tchin</string>
+</resources>
